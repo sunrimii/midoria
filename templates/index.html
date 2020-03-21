@@ -49,18 +49,23 @@
         
         var button = document.querySelector("button")
         button.addEventListener("click", function(){
-            var request = new XMLHttpRequest()
-            request.open("POST", "http://127.0.0.1:5278")
-            request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded')
-            var uri = signaturePad.toDataURL("image/jpeg")
-            request.send("uri=" + uri)
-            request.onload = function(){
-                console.log(uri)
-                console.log(this.responseText)
-                button.disabled = true
-                document.getElementById("prediction").innerHTML = this.responseText
-                button.disabled = false
-                signaturePad.clear()
+            if (signaturePad.isEmpty()){
+                document.getElementById("prediction").innerHTML = ""
+            }
+            else{
+                var request = new XMLHttpRequest()
+                request.open("POST", "http://127.0.0.1:5278")
+                request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded')
+                var uri = signaturePad.toDataURL("image/jpeg")
+                request.send("uri=" + uri)
+                request.onload = function(){
+                    console.log(uri)
+                    console.log(this.responseText)
+                    button.disabled = true
+                    document.getElementById("prediction").innerHTML = this.responseText
+                    button.disabled = false
+                    signaturePad.clear()
+                }
             }
         })
     </script>
