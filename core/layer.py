@@ -1,23 +1,42 @@
 import numpy as np
 
 
-class BatchNorm:
-    def __init__(self, shape):
-        self.gamma = np.random.uniform(0.99, 1.01, shape)
-        self.beta = np.random.uniform(-0.01, 0.01, shape)
+class Layer:
+    def __init__(self):
+        self.previous_layer: Layer = None
+        self.next_layer: Layer = None
 
-        self.do_predict_or_evaluate = False
+class BatchNorm(Layer):
+    def __init__(self, shape):
+        super().__init__()
+        
+        self.gamma = np.random.uniform(0.9, 1.1, shape)
+        self.beta = np.random.uniform(-0.1, 0.1, shape)
+
+        # 根據模式的不同使用不同組參數
+        self.do_fit = False
 
     def forward(self, x):
         # 在訓練階段使用基於批量計算的參數
-        # 在評估階段使用基於整體計算的參數
-        if not self.do_predict_or_evaluate:
+        if self.do_fit:
             # 平均值
             self.u = x.mean(axis=1, keepdims=True)
             # 方差
             v = x.var(axis=1, keepdims=True)
             # 標準差
             self.s = (v + 1e-15) ** 0.5
+        # 在評估階段使用基於整體計算的參數
+        else:
+            if not hasattr(self, 'overall_u'):
+                # 平均值
+                self.overall_u = x.mean(axis=1, keepdims=True)
+                # 方差
+                v = x.var(axis=1, keepdims=True)
+                # 標準差
+                self.overall_s = (v + 1e-15) ** 0.5
+
+            self.u = self.overall_u
+            self.s = self.overall_s
 
         self.xhat = (x - self.u) / self.s
         z = self.gamma * self.xhat + self.beta
@@ -32,7 +51,7 @@ class BatchNorm:
             dLdx = self.gamma / self.s * (delta - self.dLdbeta - self.dLdgamma * self.xhat)
             self.previous_layer.backward(dLdx)
 
-class Flatten:
+class Flatten(Layer):
     def forward(self, x):
         self.xshape = x.shape
 
@@ -46,8 +65,10 @@ class Flatten:
         delta = delta.reshape(self.xshape)
         self.previous_layer.backward(delta)
 
-class Conv:
+class Conv(Layer):
     def __init__(self, knum, ksize, kchannel, strides=1, pwidth=0):
+        super().__init__()
+        
         self.W = np.random.uniform(-0.01, 0.01, (knum, ksize, ksize, kchannel))
         self.b = np.random.uniform(-0.01, 0.01, (knum, ksize, ksize, kchannel))
 
@@ -97,8 +118,10 @@ class Conv:
             dLdx = np.tensordot(splited_delta, rot180_W.T, axes=((3, 4, 5), (1, 2, 3)))
             self.previous_layer.backward(dLdx)
         
-class MaxPooling:
+class MaxPooling(Layer):
     def __init__(self, ksize):
+        super().__init__()
+        
         self.ksize = ksize
     
     def forward(self, a):
@@ -114,8 +137,10 @@ class MaxPooling:
         dLdx = delta.repeat(self.ksize, axis=1).repeat(self.ksize, axis=2) * self.mask
         self.previous_layer.backward(dLdx)
 
-class Dense:
+class Dense(Layer):
     def __init__(self, shape):
+        super().__init__()
+        
         self.W = np.random.uniform(-0.01, 0.01, shape)
         self.b = np.random.uniform(-0.01, 0.01, (shape[0], 1))
         
@@ -136,9 +161,10 @@ class Dense:
             dLdx = np.dot(dzdx, delta)
             self.previous_layer.backward(dLdx)
 
-class Sigmoid:
+class Sigmoid(Layer):
     def forward(self, z):
-        self.a = 1 / (1 + np.exp(-z))
+        # self.a = 1 / (1 + np.exp(-z))
+        self.a = 0.5 * (1 + np.tanh(0.5 * z))
         self.next_layer.forward(self.a)
     
     def backward(self, delta):
@@ -146,7 +172,7 @@ class Sigmoid:
         dLdz = delta * dadz
         self.previous_layer.backward(dLdz)
 
-class Relu:
+class Relu(Layer):
     def forward(self, z):
         self.z = z
         a = np.maximum(z, 0)
@@ -157,7 +183,7 @@ class Relu:
         dLdz = delta * dadz
         self.previous_layer.backward(dLdz)
 
-class Softmax:
+class Softmax(Layer):
     def forward(self, z):
         # 避免溢出
         z -= z.max(axis=0, keepdims=True)
@@ -171,143 +197,30 @@ class Softmax:
         dLdz = delta * dadz
         self.previous_layer.backward(dLdz)
 
-class MSE:
+class MSE(Layer):
     def forward(self, a):
-        self.a = a
-
-        # 取別名
-        self.prediction = self.a
+        self.prediction = self.a = a
     
     def backward(self, y):
         dLda = 2 * (y - self.a)
         self.previous_layer.backward(dLda)
 
-class SoftmaxCrossEntropy:
+    def calc_loss(self, y):
+        loss = ((y - self.a) ** 2).sum(axis=0).mean()
+        return loss
+
+class SoftmaxCrossEntropy(Layer):
     def forward(self, z):
         # 避免溢出
         z -= z.max(axis=0)
 
         expz = np.exp(z)
-        self.a = expz / expz.sum(axis=0)
-        
-        # 取別名
-        self.prediction = self.a
+        self.prediction = self.a = expz / expz.sum(axis=0)
 
     def backward(self, y):
         dLdz = self.a - y
         self.previous_layer.backward(dLdz)
 
-class BGD:
-    def __init__(self, lr):
-        self.lr = lr
-
-    def update(self):
-        for layer in self.layers:
-            if isinstance(layer, BatchNorm):
-                layer.gamma += self.lr * layer.dLdgamma
-                layer.beta += self.lr * layer.dLdbeta
-            elif isinstance(layer, (Dense, Conv)):
-                layer.W += self.lr * layer.dLdW
-                layer.b += self.lr * layer.dLdb
-
-class Model:
-    def __init__(self, layers, optimizer):
-        self.layers = layers
-        self.optimizer = optimizer
-        self.optimizer.layers = self.layers
-
-        # 建立前後層關係
-        for i in range(len(layers) - 1):
-            self.layers[i].next_layer = self.layers[i+1]
-        for i in range(1, len(layers)):
-            self.layers[i].previous_layer = self.layers[i-1]
-        self.layers[0].previous_layer = None
-        self.layers[-1].next_layer = None
-
-        # 取輸入層損失層的別名
-        self.input_layer = self.layers[0]
-        self.loss_layer = self.layers[-1]
-
-    def fit(self, training_x, training_y, epochs, batch_size):
-        # 存放訓練過程的詳細資訊
-        # history = {}
-        
-        order = np.arange(training_y.shape[1])
-        for epoch in range(epochs):
-            # 打亂順序
-            np.random.shuffle(order)
-
-            # 分配成批量
-            batches = []
-            for i in range(0, len(order), batch_size):
-                if training_x.ndim == 2:
-                    try:
-                        batches.append((
-                            training_x[:, order[i: i+batch_size]], 
-                            training_y[:, order[i: i+batch_size]]))
-                    except IndexError:
-                        batches.append((
-                            training_x[:, order[i:]], 
-                            training_y[:, order[i:]]))
-                elif training_x.ndim == 4:
-                    try:
-                        batches.append((
-                            training_x[order[i: i+batch_size]], 
-                            training_y[:, order[i: i+batch_size]]))
-                    except IndexError:
-                        batches.append((
-                            training_x[order[i:]], 
-                            training_y[:, order[i:]]))
-            
-            # 訓練每個批量 
-            for i, (batch_x, batch_y) in enumerate(batches):
-                self.input_layer.forward(batch_x)
-                self.loss_layer.backward(batch_y)
-                self.optimizer.update()
-
-                if i % 50 == 0:
-                    accuracy = self.evaluate(batch_x, batch_y)
-                    print(f"Epoch: {epoch}, Batch accuracy: {accuracy:.3f}")
-
-        # 使批量標準化層準備在評估時所需要的參數
-        for layer in self.layers:
-            if isinstance(layer, BatchNorm):
-                self.input_layer.forward(training_x)
-                break
-        for layer in self.layers:
-            if isinstance(layer, BatchNorm):
-                layer.do_predict_or_evaluate = True
-    
-    def evaluate(self, batch_x, batch_y):
-        self.input_layer.forward(batch_x)
-        accuracy = (self.loss_layer.prediction.argmax(axis=0) == batch_y.argmax(axis=0)).mean()
-        return accuracy
-
-class Mnist:
-    def __init__(self, flatten=False):
-        self.flatten = flatten
-        
-        self.training_images = self.load_images('database/mnist/train-images.idx3-ubyte')
-        self.training_labels = self.load_labels('database/mnist/train-labels.idx1-ubyte')
-        self.testing_images = self.load_images('database/mnist/t10k-images.idx3-ubyte')
-        self.testing_labels = self.load_labels('database/mnist/t10k-labels.idx1-ubyte')
-
-    def load_images(self, path):
-        with open(path, 'rb') as file:
-            file.read(16)
-            if self.flatten:
-                images = np.fromfile(file, dtype=np.uint8).reshape(-1, 28*28) / 255
-                images = np.rot90(images)
-                images = np.flipud(images)
-            else:
-                images = np.fromfile(file, dtype=np.uint8).reshape(-1, 28, 28, 1) / 255
-            return images
-
-    def load_labels(self, path):
-        with open(path, 'rb') as file:
-            file.read(8)
-            labels = np.fromfile(file, dtype=np.uint8)
-            one_hot_labels = np.zeros((10, len(labels)))
-            for i, l in enumerate(labels):
-                one_hot_labels[l, i] = 1
-            return one_hot_labels
+    def calc_loss(self, y):
+        loss = -(y * np.log10(self.a)).sum(axis=0).mean()
+        return loss

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>手寫數字辨識</title>
+    <!-- 畫板 -->
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@2.3.2/dist/signature_pad.min.js"></script>
+    <!-- 字體 -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC&display=swap" rel="stylesheet">
+    <!-- 按鈕 -->
+    <link href="https://unpkg.com/material-components-web@v4.0.0/dist/material-components-web.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/material-components-web@v4.0.0/dist/material-components-web.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <style>
+        #prediction{
+            font-family: Noto Sans TC;
+            font-size: 1000px;
+            position: fixed;
+            top: -500px;
+            right: 0px;
+            user-select: none
+        }
+        .box{
+            box-shadow: 0px 4px 8px 0px rgba(0, 0, 0, 0.5);
+            position: fixed;
+            top: 100px;
+            left: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div id="prediction"></div>
+    <div class="box">
+        <div><canvas width=300 height=300></canvas></div>
+        <div><button class="mdc-button" width=300 height=300 style="width: 100%"><span class="mdc-button__ripple"></span><i class="material-icons mdc-button__icon">check</i></button></div>
+    </div>
+
+    <script>
+        // 按鈕特效
+        mdc.ripple.MDCRipple.attachTo(document.querySelector('button'))
+
+        var canvas = document.querySelector("canvas")
+        var signaturePad = new SignaturePad(canvas, {})
+        signaturePad.minWidth = 9
+        signaturePad.dotSize = 10
+        signaturePad.maxWidth = 11
+        signaturePad.backgroundColor = "rgb(255, 255, 255)"
+        signaturePad.clear()
+        
+        var button = document.querySelector("button")
+        button.addEventListener("click", function(){
+            var request = new XMLHttpRequest()
+            request.open("POST", "http://127.0.0.1:5278")
+            request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded')
+            var uri = signaturePad.toDataURL("image/jpeg")
+            request.send("uri=" + uri)
+            request.onload = function(){
+                console.log(uri)
+                console.log(this.responseText)
+                button.disabled = true
+                document.getElementById("prediction").innerHTML = this.responseText
+                button.disabled = false
+                signaturePad.clear()
+            }
+        })
+    </script>
+</body>
+</html>
