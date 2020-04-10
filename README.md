@@ -1,6 +1,8 @@
 # 佈署手寫辨識於網頁
 ![網頁示範](https://github.com/sunrimii/midoria/blob/master/demo.gif)
 
+於[server.py](https://github.com/sunrimii/midoria/blob/master/server.py)和[index.html](https://github.com/sunrimii/midoria/blob/master/templates/index.html)修改相應地址後, 再執行`server.py`即佈署完成
+
 # 程式說明
 參考[cnn_example.py](https://github.com/sunrimii/midoria/blob/master/cnn_example.py)
 ```python
