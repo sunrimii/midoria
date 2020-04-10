@@ -54,7 +54,7 @@
             }
             else{
                 var request = new XMLHttpRequest()
-                request.open("POST", "http://127.0.0.1:5278")
+                request.open("POST", "http://220.135.154.224:5278/")
                 request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded')
                 var uri = signaturePad.toDataURL("image/jpeg")
                 request.send("uri=" + uri)

@@ -63,4 +63,4 @@ model = Model(cnn_layers, optimizer)
 # 讀取已訓練的參數
 model.load('cnn913')
 
-app.run(host='127.0.0.1', port='5278')
+app.run(host='192.168.1.100', port='5278')
